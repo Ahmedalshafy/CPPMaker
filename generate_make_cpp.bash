@@ -71,23 +71,30 @@ $INCLUDES
 all: \$(NAME)
 
 \$(NAME): \$(SRC)
-	\$(CXX) -o \$@ \$(CXXFLAGS) \$(SRC)
-	@echo "\$(GREEN)Compilation successful!\$(RESET)"
+	@\$(CXX) \$(CXXFLAGS) \$(SRC) -o \$(NAME)
+	@printf "\$(GREEN)Compilation successful!\$(RESET)\n"
 
 clean:
-	rm -rf \$(NAME)
-	@echo "\$(YELLOW)Executable removed.\$(RESET)"
-
-ifeq (\$(valgrind_answer),y)
-valgrind:
-	@echo "\$(CURSIVE)Running valgrind...\$(RESET)"
-	valgrind --leak-check=full ./\$(NAME)
-endif
+	@rm -rf \$(NAME)
+	@printf "\$(YELLOW)Executable removed.\$(RESET)\n"
 
 re: clean all
 
-.PHONY: all clean re
 EOL
+
+if [ "$valgrind_answer" == "y" ]; then
+	cat <<EOF >> Makefile
+valgrind:
+	@printf "\$(CURSIVE)Running valgrind...\$(RESET)\n"
+	valgrind --leak-check=full ./\$(NAME)
+
+.PHONY: all clean re valgrind
+EOF
+else 
+	cat <<EOF >> Makefile
+.PHONY: all clean re
+EOF
+fi
 
 echo "Makefile generated successfully."
 
@@ -101,6 +108,63 @@ int main(void) {
 
 	return 0;
 }
-
 EOF
 fi
+
+echo "main.cpp generated successfully."
+
+read -p "Would you like to yaml file for the project? [y/n]: " yaml_answer
+
+if [ "$yaml_answer" == "y" ]; then
+	cd project_name/exercise
+	mkdir -p .github/workflows
+	cd .github/workflows
+	touch $program_name.yaml
+	cat <<EOF > $program_name.yaml
+name: C++ CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up C++ environment
+      uses: actions/setup-cpp@v2
+      with:
+        compiler: c++
+
+    - name: Install dependencies
+      run: sudo apt-get install -y cmake
+
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make
+
+    - name: Run tests
+      run: |
+        cd build
+        # Assuming you have a test executable named "test"
+        make test
+
+    - name: Check for memory leaks with Valgrind
+      if: success()
+      run: |
+        cd build
+        make valgrind
+EOF
+fi
+
